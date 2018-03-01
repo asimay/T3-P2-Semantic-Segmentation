@@ -45,6 +45,10 @@ def load_vgg(sess, vgg_path):
 
 tests.test_load_vgg(load_vgg, tf)
 
+#some experience value from website
+STD_DEV=0.001
+STD_DEV_layer4=0.001
+STD_DEV_layer3=0.0001
 
 def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
     """
@@ -56,33 +60,50 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
     :return: The Tensor for the last layer of output
     """
     # TODO: Implement function
-
+	# this is 1x1 convolution layer, replace with fully connection layer
     conv_1x1 = tf.layers.conv2d(vgg_layer7_out, num_classes, 1, strides=(1,1), padding='same',
+	                            kernel_initializer=tf.random_normal_initializer(stddev=STD_DEV),
                                 kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3))
 
-    output_1 = tf.layers.conv2d_transpose(conv_1x1, num_classes, 4, strides=(2,2), padding='same',
+	#de-convolution
+    layer4_input_1 = tf.layers.conv2d_transpose(conv_1x1, num_classes, 4, strides=(2,2), padding='same',
+										kernel_initializer=tf.random_normal_initializer(stddev=STD_DEV),
                                         kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3))
 
-    output_2 = tf.layers.conv2d_transpose(output_1, num_classes, 4, strides=(2,2), padding='same',
-                                          kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3))
-
-    output_3 = tf.layers.conv2d_transpose(output_2, num_classes, 4, strides=(8,8), padding='same',
-                                          kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3))
-
-	input = tf.add(input, vgg_layer3_out)
-	input = tf.layers.conv2d_transpose(input, num_classes, 4, strides=(2,2), padding='same',
-										kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3))
-	input = tf.add(input, vgg_layer4_out)
-	input = tf.layers.conv2d_transpose(input, num_classes, 4, strides=(2,2), padding='same',
-										kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3))
+	tf.Print(layer4_input_1, [tf.shape(layer4_input_1)[1:3]])
+	
+	layer4_input_2 = tf.layers.conv2d(vgg_layer4_out, num_classes, 1, strides=(1,1), padding='same',
+									  kernel_initializer=tf.random_normal_initializer(stddev=STD_DEV_layer4),
+                                      kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3))
+	
+	tf.Print(layer4_input_2, [tf.shape(layer4_input_2)[1:3]])
+		
+	#skip connection for layer4
+	layer4_out = tf.add(layer4_input_1, layer4_input_2)
+	
+	
+    layer3_input_1 = tf.layers.conv2d_transpose(layer4_out, num_classes, 4, strides=(2,2), padding='same',
+                                          kernel_initializer=tf.random_normal_initializer(stddev=STD_DEV),
+										  kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3))
+	
+	tf.Print(layer3_input_1, [tf.shape(layer3_input_1)[1:3]])
+	
+	layer3_input_2 = tf.layers.conv2d(vgg_layer3_out, num_classes, 1, strides=(1,1), padding='same',
+									  kernel_initializer=tf.random_normal_initializer(stddev=STD_DEV_layer3),
+                                      kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3))
+	
+	tf.Print(layer3_input_2, [tf.shape(layer3_input_2)[1:3]])
+	
+	#skip connection for layer3
+	layer3_out = tf.add(layer3_input_1, layer3_input_2)
+	
+    output_layer = tf.layers.conv2d_transpose(layer3_out, num_classes, 16, strides=(8,8), padding='same',
+                                          kernel_initializer=tf.random_normal_initializer(stddev=STD_DEV),
+										  kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3))
 										
-	input = tf.add(input, vgg_layer7_out)
-	input = tf.layers.conv2d_transpose(input, num_classes, 16, strides=(8,8), padding='same',
-										kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3))
-										
-    tf.Print(output_1, [tf.shape(output_1)[1:3]])
+    tf.Print(output_layer, [tf.shape(output_layer)[1:3]])
 
-    return None
+    return output_layer
 	
 tests.test_layers(layers)
 
@@ -98,8 +119,11 @@ def optimize(nn_last_layer, correct_label, learning_rate, num_classes):
     """
     # TODO: Implement function
 
+	#keep same dimension
     logits = tf.reshape(nn_last_layer, (-1, num_classes))
-	cross_entropy = tf.nn.softmax_cross_entropy_with_logits(labels=correct_label, logits=logits)
+	class_labels = tf.reshape(correct_label, (-1, num_classes))
+	
+	cross_entropy = tf.nn.softmax_cross_entropy_with_logits(labels=class_labels, logits=logits)
     cross_entropy_loss = tf.reduce_mean(cross_entropy)
 	
 	optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
@@ -109,6 +133,9 @@ def optimize(nn_last_layer, correct_label, learning_rate, num_classes):
 	
 tests.test_optimize(optimize)
 
+
+DROP_OUT = 0.3
+LEARN_RATE = 0.0005
 
 def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_loss, input_image,
              correct_label, keep_prob, learning_rate):
@@ -126,14 +153,26 @@ def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_l
     :param learning_rate: TF Placeholder for learning rate
     """
     # TODO: Implement function
-    for epoch in epochs:
-        for image, label in get_batches_fn(batch_size):
-            sess.run(train_op, feed_dict={x:image, y:label, Keep_prob:keep_prob})
-			
-		print("EPOCH {} ...".format(epoch+1))
+	print("Begin to train...")
+    for epoch in range(epochs):
+		total_loss = []
 		
-		train_IOU = 0
-		print("Training Accuracy IOU = {:.3f}".format(train_IOU))
+        for image, label in get_batches_fn(batch_size):
+			feed_list = { input_image: image,
+						  correct_label: label,
+						  keep_prob: DROP_OUT,
+						  learning_rate: LEARN_RATE }
+						  
+            _, loss = sess.run([train_op, cross_entropy_loss], feed_dict=feed_list)
+			total_loss.append(loss)
+			
+		train_loss = sum(total_loss)/len(total_loss)
+			
+		print("EPOCH {} ...  Loss is : {:.5f} ".format(epoch+1, train_loss))
+		print("Loss: {:.6f}".format())
+		
+		#train_IOU = 0
+		#print("Training Accuracy IOU = {:.3f}".format(train_IOU))
 		print()
 		
 	return
@@ -143,7 +182,7 @@ tests.test_train_nn(train_nn)
 
 def run():
     num_classes = 2
-    image_shape = (160, 576)
+    image_shape = (160, 576)  #origin: (375, 1242)
     data_dir = './data'
     runs_dir = './runs'
     tests.test_for_kitti_dataset(data_dir)
@@ -155,32 +194,33 @@ def run():
     # You'll need a GPU with at least 10 teraFLOPS to train on.
     #  https://www.cityscapes-dataset.com/
 	
-	
-	
 	epochs = 6
 	batch_size = 32
-	learning_rate = 0.001
-	x = tf.placeholder(tf.float32, (None, image_shape.shape[0], image_shape.shape[1], 1))
-	y = tf.placeholder(tf.int32, (None))
-	Keep_prob = tf.placeholder(tf.float32)
-	keep_prob = 0.3
+	
+	#x = tf.placeholder(tf.float32, (None, image_shape[0], image_shape[1], num_classes))
+	correct_label = tf.placeholder(tf.float32, [None, image_shape[0], image_shape[1], num_classes])
+	keep_prob = tf.placeholder(tf.float32)
+	learning_rate = tf.placeholder(tf.float32)
 
 	init = tf.global_variables_initializer()
+	init_local = tf.local_variables_initializer()
 	saver = tf.train.Saver()
-	iou, iou_op = tf.metrics.mean_iou(ground_truth, prediction, num_classes)
+
 	
     with tf.Session() as sess:
-		sess.run(init)
         # Path to vgg model
         vgg_path = os.path.join(data_dir, 'vgg')   #./data/vgg/
         # Create function to get batches
         get_batches_fn = helper.gen_batch_function(os.path.join(data_dir, 'data_road/training'), image_shape)
-		input_img, correct_label = get_batches_fn(batch_size)
+		
 
         # OPTIONAL: Augment Images for better results
         #  https://datascience.stackexchange.com/questions/5224/how-to-prepare-augment-images-for-neural-network
 
         # TODO: Build NN using load_vgg, layers, and optimize function
+		sess.run(init)
+		sess.run(init_local)
+		
         input_image, keep_prob, layer3_out, layer4_out, layer7_out = load_vgg(sess, vgg_path)
         layer_output = layers(layer3_out, layer4_out, layer7_out, num_classes)
 		
@@ -191,6 +231,8 @@ def run():
 		train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_loss, input_image, correct_label,
 				 keep_prob, learning_rate)
 		
+		iou, iou_op = tf.metrics.mean_iou(correct_label, tf.argmax(logits, 1), num_classes)
+			
 		sess.run(iou_op)
 		print("Mean IoU =", sess.run(iou))
 		
