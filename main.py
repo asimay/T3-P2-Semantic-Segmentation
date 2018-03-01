@@ -124,7 +124,7 @@ def optimize(nn_last_layer, correct_label, learning_rate, num_classes):
 	logits = tf.reshape(nn_last_layer, (-1, num_classes))
 	class_labels = tf.reshape(correct_label, (-1, num_classes))
 
-	cross_entropy = tf.nn.softmax_cross_entropy_with_logits(labels=class_labels, logits=logits)
+	cross_entropy = tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=class_labels)
 	cross_entropy_loss = tf.reduce_mean(cross_entropy)
 
 	optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
@@ -155,9 +155,12 @@ def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_l
     :param learning_rate: TF Placeholder for learning rate
     """
 	# TODO: Implement function
+	sess.run(tf.global_variables_initializer())
+
 	print("Begin to train...")
 	for epoch in range(epochs):
 		total_loss = []
+		print("enter into for loop")
 
 		for image, label in get_batches_fn(batch_size):
 			feed_list = {input_image: image,
@@ -165,8 +168,8 @@ def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_l
 			             keep_prob: 0.5,
 			             learning_rate: 0.0005}
 
-			_, loss = sess.run([train_op, cross_entropy_loss], feed_dict={input_image: image, correct_label: label,
-			                                                              keep_prob: 0.5, learning_rate: 0.0005})
+			_, loss = sess.run([train_op, cross_entropy_loss], feed_dict=feed_list)
+
 			print("Batch is {} ...".format(batch_size))
 			total_loss.append(loss)
 
@@ -198,8 +201,8 @@ def run():
 	# You'll need a GPU with at least 10 teraFLOPS to train on.
 	#  https://www.cityscapes-dataset.com/
 
-	epochs = 6
-	batch_size = 32
+	epochs = 20
+	batch_size = 16
 
 	# x = tf.placeholder(tf.float32, (None, image_shape[0], image_shape[1], num_classes))
 	correct_label = tf.placeholder(tf.float32, [None, image_shape[0], image_shape[1], num_classes])
@@ -229,10 +232,12 @@ def run():
 		logits, train_op, cross_entropy_loss = optimize(layer_output, correct_label, learning_rate, num_classes)
 
 		# TODO: Train NN using the train_nn function
+		print("come 1111")
 
 		train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_loss, input_image, correct_label,
 		         keep_prob, learning_rate)
 
+		print("come 2222")
 		# iou, iou_op = tf.metrics.mean_iou(correct_label, tf.argmax(logits, 1), num_classes)
 		# sess.run(iou_op)
 		# print("Mean IoU =", sess.run(iou))
@@ -242,7 +247,7 @@ def run():
 		helper.save_inference_samples(runs_dir, data_dir, sess, image_shape, logits, keep_prob, input_image)
 
 		# saver.save(sess, './')
-		print("Model saved")
+		#print("Model saved")
 
 		# OPTIONAL: Apply the trained model to a video
 
