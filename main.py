@@ -4,6 +4,10 @@ import helper
 import warnings
 from distutils.version import LooseVersion
 import project_tests as tests
+from glob import glob
+import numpy as np
+import scipy.misc
+import math
 
 # Check TensorFlow Version
 assert LooseVersion(tf.__version__) >= LooseVersion(
@@ -71,13 +75,13 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
 	                                            kernel_initializer=tf.random_normal_initializer(stddev=STD_DEV),
 	                                            kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3))
 
-	tf.Print(layer4_input_1, [tf.shape(layer4_input_1)[1:3]])
+	tf.Print(layer4_input_1, [tf.shape(layer4_input_1)[:]])
 
 	layer4_input_2 = tf.layers.conv2d(vgg_layer4_out, num_classes, 1, strides=(1, 1), padding='same',
 	                                  kernel_initializer=tf.random_normal_initializer(stddev=STD_DEV),
 	                                  kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3))
 
-	tf.Print(layer4_input_2, [tf.shape(layer4_input_2)[1:3]])
+	tf.Print(layer4_input_2, [tf.shape(layer4_input_2)[:]])
 
 	# skip connection for layer4
 	layer4_out = tf.add(layer4_input_1, layer4_input_2)
@@ -86,13 +90,13 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
 	                                            kernel_initializer=tf.random_normal_initializer(stddev=STD_DEV),
 	                                            kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3))
 
-	tf.Print(layer3_input_1, [tf.shape(layer3_input_1)[1:3]])
+	tf.Print(layer3_input_1, [tf.shape(layer3_input_1)[:]])
 
 	layer3_input_2 = tf.layers.conv2d(vgg_layer3_out, num_classes, 1, strides=(1, 1), padding='same',
 	                                  kernel_initializer=tf.random_normal_initializer(stddev=STD_DEV),
 	                                  kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3))
 
-	tf.Print(layer3_input_2, [tf.shape(layer3_input_2)[1:3]])
+	tf.Print(layer3_input_2, [tf.shape(layer3_input_2)[:]])
 
 	# skip connection for layer3
 	layer3_out = tf.add(layer3_input_1, layer3_input_2)
@@ -101,7 +105,7 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
 	                                          kernel_initializer=tf.random_normal_initializer(stddev=STD_DEV),
 	                                          kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3))
 
-	tf.Print(output_layer, [tf.shape(output_layer)[1:3]])
+	tf.Print(output_layer, [tf.shape(output_layer)[:]])
 
 	return output_layer
 
@@ -136,8 +140,8 @@ def optimize(nn_last_layer, correct_label, learning_rate, num_classes):
 tests.test_optimize(optimize)
 
 
-# DROP_OUT = 0.5
-# LEARN_RATE = 0.0005
+DROP_OUT = 0.5
+LEARN_RATE = 0.001
 
 def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_loss, input_image,
              correct_label, keep_prob, learning_rate):
@@ -157,28 +161,32 @@ def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_l
 	# TODO: Implement function
 	sess.run(tf.global_variables_initializer())
 
+	image_paths = glob(os.path.join('./data/data_road/training', 'image_2', '*.png'))
+	total_count = math.floor(len(image_paths)/batch_size)
+
 	print("Begin to train...")
 	for epoch in range(epochs):
 		total_loss = []
-		print("enter into for loop")
+		#print("enter into for loop")
+		count = 0
 
 		for image, label in get_batches_fn(batch_size):
 			feed_list = {input_image: image,
 			             correct_label: label,
-			             keep_prob: 0.5,
-			             learning_rate: 0.0005}
+			             keep_prob: DROP_OUT,
+			             learning_rate: LEARN_RATE}
 
+			print("Progress is : {:.1f}%".format(100 * (count / total_count)))
+
+			# training model
 			_, loss = sess.run([train_op, cross_entropy_loss], feed_dict=feed_list)
 
-			print("Batch is {} ...".format(batch_size))
+			count = count + 1
 			total_loss.append(loss)
 
 		train_loss = sum(total_loss) / len(total_loss)
 
-		print("EPOCH {} ...  Loss is : {:.5f} ".format(epoch + 1, train_loss))
-
-		# train_IOU = 0
-		# print("Training Accuracy IOU = {:.3f}".format(train_IOU))
+		print("EPOCH {} ... Training Loss is : {:.5f} ".format(epoch + 1, train_loss))
 		print()
 
 	return
@@ -186,6 +194,7 @@ def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_l
 
 tests.test_train_nn(train_nn)
 
+global logitss
 
 def run():
 	num_classes = 2
@@ -211,15 +220,20 @@ def run():
 
 	init = tf.global_variables_initializer()
 	init_local = tf.local_variables_initializer()
-	# saver = tf.train.Saver()
+	#graph = tf.get_default_graph()
+	#with graph.as_default():
+	#	saver = tf.train.Saver()
 
 	with tf.Session() as sess:
 		# Path to vgg model
 		vgg_path = os.path.join(data_dir, 'vgg')  # ./data/vgg/
+
+		# Augment Images for better results
+		helper.gen_augumentation_data(os.path.join(data_dir, 'data_road/training'), image_shape)
+
 		# Create function to get batches
 		get_batches_fn = helper.gen_batch_function(os.path.join(data_dir, 'data_road/training'), image_shape)
 
-		# OPTIONAL: Augment Images for better results
 		#  https://datascience.stackexchange.com/questions/5224/how-to-prepare-augment-images-for-neural-network
 
 		# TODO: Build NN using load_vgg, layers, and optimize function
@@ -231,26 +245,74 @@ def run():
 
 		logits, train_op, cross_entropy_loss = optimize(layer_output, correct_label, learning_rate, num_classes)
 
-		# TODO: Train NN using the train_nn function
-		print("come 1111")
+		logitss = logits
 
+		# TODO: Train NN using the train_nn function
 		train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_loss, input_image, correct_label,
 		         keep_prob, learning_rate)
 
-		print("come 2222")
-		# iou, iou_op = tf.metrics.mean_iou(correct_label, tf.argmax(logits, 1), num_classes)
-		# sess.run(iou_op)
-		# print("Mean IoU =", sess.run(iou))
+		iou, iou_op = tf.metrics.mean_iou(correct_label, tf.nn.softmax(logits), num_classes)
+		sess.run(iou_op)
+		print("Mean IoU =", sess.run(iou))
 
 		# TODO: Save inference data using helper.save_inference_samples
 		# helper.save_inference_samples(runs_dir, data_dir, sess, image_shape, logits, keep_prob, input_image)
 		helper.save_inference_samples(runs_dir, data_dir, sess, image_shape, logits, keep_prob, input_image)
 
-		# saver.save(sess, './')
-		#print("Model saved")
+		tf.train.Saver().save(sess, './train_model')
+		print("Model saved")
 
 		# OPTIONAL: Apply the trained model to a video
 
 
+def process_video(images):
+	# test train model
+	image_shape = (160, 576)
+	num_classes = 2
+
+	input_image = tf.placeholder(tf.float32, [None, image_shape[0], image_shape[1], num_classes])
+	keep_prob = tf.placeholder(tf.float32)
+
+	init = tf.global_variables_initializer()
+	init_local = tf.local_variables_initializer()
+	saver = tf.train.Saver()
+
+	with tf.Session() as sess:
+		sess.run(init)
+		sess.run(init_local)
+
+		saver.restore(sess, tf.train.latest_checkpoint('.'))
+		print("Model restore...")
+
+		#image = scipy.misc.imresize(scipy.misc.imread(image_file), image_shape)
+		image = scipy.misc.imresize(np.array(images), image_shape)
+		im_softmax = sess.run(
+			[tf.nn.softmax(logitss)],
+			{keep_prob: 1.0, input_image: [image]})
+		im_softmax = im_softmax[0][:, 1].reshape(image_shape[0], image_shape[1])
+		segmentation = (im_softmax > 0.5).reshape(image_shape[0], image_shape[1], 1)
+		mask = np.dot(segmentation, np.array([[0, 255, 0, 127]]))
+		mask = scipy.misc.toimage(mask, mode="RGBA")
+		street_im = scipy.misc.toimage(image)
+		street_im.paste(mask, box=None, mask=mask)
+
+		#yield os.path.basename(image_file), np.array(street_im)
+		#cv2.draw()
+		return street_im
+
+
+def apply_train_model_on_video():
+	# Process project video
+	from moviepy.editor import VideoFileClip
+	# from IPython.display import HTML
+
+	test_output = 'project_video_output.mp4'
+	clip = VideoFileClip("image_2_1.mp4")
+	test_clip = clip.fl_image(process_video)
+	#%time
+	test_clip.write_videofile(test_output, audio=False)
+
+
 if __name__ == '__main__':
 	run()
+	apply_train_model_on_video()
