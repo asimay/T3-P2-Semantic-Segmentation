@@ -75,13 +75,15 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
 	                                            kernel_initializer=tf.random_normal_initializer(stddev=STD_DEV),
 	                                            kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3))
 
-	tf.Print(layer4_input_1, [tf.shape(layer4_input_1)[:]])
+	tf.Print(layer4_input_1, [layer4_input_1])
+	#print("layer4_input_1 get_shape:", layer4_input_1.get_shape())
 
 	layer4_input_2 = tf.layers.conv2d(vgg_layer4_out, num_classes, 1, strides=(1, 1), padding='same',
 	                                  kernel_initializer=tf.random_normal_initializer(stddev=STD_DEV),
 	                                  kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3))
 
-	tf.Print(layer4_input_2, [tf.shape(layer4_input_2)[:]])
+	tf.Print(layer4_input_2, [tf.shape(layer4_input_2)])
+	#print("layer4_input_2 shape:", layer4_input_2.get_shape())
 
 	# skip connection for layer4
 	layer4_out = tf.add(layer4_input_1, layer4_input_2)
@@ -90,13 +92,15 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
 	                                            kernel_initializer=tf.random_normal_initializer(stddev=STD_DEV),
 	                                            kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3))
 
-	tf.Print(layer3_input_1, [tf.shape(layer3_input_1)[:]])
+	tf.Print(layer3_input_1, [tf.shape(layer3_input_1)])
+	#print("layer3_input_1 shape:", layer3_input_1.get_shape())
 
 	layer3_input_2 = tf.layers.conv2d(vgg_layer3_out, num_classes, 1, strides=(1, 1), padding='same',
 	                                  kernel_initializer=tf.random_normal_initializer(stddev=STD_DEV),
 	                                  kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3))
 
-	tf.Print(layer3_input_2, [tf.shape(layer3_input_2)[:]])
+	tf.Print(layer3_input_2, [tf.shape(layer3_input_2)])
+	#print("layer3_input_2 shape:", layer3_input_2.get_shape())
 
 	# skip connection for layer3
 	layer3_out = tf.add(layer3_input_1, layer3_input_2)
@@ -105,7 +109,8 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
 	                                          kernel_initializer=tf.random_normal_initializer(stddev=STD_DEV),
 	                                          kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3))
 
-	tf.Print(output_layer, [tf.shape(output_layer)[:]])
+	tf.Print(output_layer, [tf.shape(output_layer)])
+	#print("output_layer shape:", output_layer.get_shape())
 
 	return output_layer
 
@@ -162,7 +167,8 @@ def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_l
 	sess.run(tf.global_variables_initializer())
 
 	image_paths = glob(os.path.join('./data/data_road/training', 'image_2', '*.png'))
-	total_count = math.floor(len(image_paths)/batch_size)
+	total_count = math.ceil(len(image_paths)/batch_size)
+	#print("total_count = ", total_count)
 
 	print("Begin to train...")
 	for epoch in range(epochs):
@@ -176,12 +182,13 @@ def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_l
 			             keep_prob: DROP_OUT,
 			             learning_rate: LEARN_RATE}
 
-			print("Progress is : {:.1f}%".format(100 * (count / total_count)))
+			count = count + 1
+
+			print("Progress is : {:.1f}%".format(100 * np.float32((count / total_count))))
 
 			# training model
 			_, loss = sess.run([train_op, cross_entropy_loss], feed_dict=feed_list)
 
-			count = count + 1
 			total_loss.append(loss)
 
 		train_loss = sum(total_loss) / len(total_loss)
@@ -210,13 +217,14 @@ def run():
 	# You'll need a GPU with at least 10 teraFLOPS to train on.
 	#  https://www.cityscapes-dataset.com/
 
-	epochs = 20
+	epochs = 1
 	batch_size = 16
 
 	# x = tf.placeholder(tf.float32, (None, image_shape[0], image_shape[1], num_classes))
 	correct_label = tf.placeholder(tf.float32, [None, image_shape[0], image_shape[1], num_classes])
 	keep_prob = tf.placeholder(tf.float32)
 	learning_rate = tf.placeholder(tf.float32)
+	logits = tf.Variable(1.0, name="logits")
 
 	init = tf.global_variables_initializer()
 	init_local = tf.local_variables_initializer()
@@ -229,7 +237,7 @@ def run():
 		vgg_path = os.path.join(data_dir, 'vgg')  # ./data/vgg/
 
 		# Augment Images for better results
-		helper.gen_augumentation_data(os.path.join(data_dir, 'data_road/training'), image_shape)
+		#helper.gen_augumentation_data(os.path.join(data_dir, 'data_road/training'), image_shape)
 
 		# Create function to get batches
 		get_batches_fn = helper.gen_batch_function(os.path.join(data_dir, 'data_road/training'), image_shape)
@@ -251,15 +259,22 @@ def run():
 		train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_loss, input_image, correct_label,
 		         keep_prob, learning_rate)
 
-		iou, iou_op = tf.metrics.mean_iou(correct_label, tf.nn.softmax(logits), num_classes)
-		sess.run(iou_op)
-		print("Mean IoU =", sess.run(iou))
+		logits_iou = tf.nn.softmax(logits)
+		print("logits_iou shape 0 :", logits_iou.get_shape())
+		logits_iou = tf.reshape(logits_iou, (-1, image_shape[0], image_shape[1], num_classes))
+		print("logits_iou shape 1 :", logits_iou.get_shape())
+		print("correct_label shape  :", correct_label.get_shape())
+		print()
+
+		#iou, iou_op = tf.metrics.mean_iou(correct_label, logits_iou, num_classes)
+		#sess.run(iou_op)
+		#print("Mean IoU = ", sess.run(iou))
 
 		# TODO: Save inference data using helper.save_inference_samples
 		# helper.save_inference_samples(runs_dir, data_dir, sess, image_shape, logits, keep_prob, input_image)
 		helper.save_inference_samples(runs_dir, data_dir, sess, image_shape, logits, keep_prob, input_image)
 
-		tf.train.Saver().save(sess, './train_model')
+		tf.train.Saver().save(sess, './train_model/model.ckpt')
 		print("Model saved")
 
 		# OPTIONAL: Apply the trained model to a video
@@ -274,15 +289,16 @@ def process_video(images):
 	keep_prob = tf.placeholder(tf.float32)
 
 	init = tf.global_variables_initializer()
-	init_local = tf.local_variables_initializer()
-	saver = tf.train.Saver()
 
 	with tf.Session() as sess:
 		sess.run(init)
-		sess.run(init_local)
+		saver = tf.train.import_meta_graph('./train_model/model.ckpt.meta')
 
-		saver.restore(sess, tf.train.latest_checkpoint('.'))
+		saver.restore(sess, tf.train.latest_checkpoint('./train_model'))
 		print("Model restore...")
+
+		graph = tf.get_default_graph()
+		logitss = graph.get_tensor_by_name("logits:0")
 
 		#image = scipy.misc.imresize(scipy.misc.imread(image_file), image_shape)
 		image = scipy.misc.imresize(np.array(images), image_shape)
@@ -315,4 +331,4 @@ def apply_train_model_on_video():
 
 if __name__ == '__main__':
 	run()
-	apply_train_model_on_video()
+	#apply_train_model_on_video()
