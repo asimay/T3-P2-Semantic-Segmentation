@@ -201,7 +201,6 @@ def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_l
 
 tests.test_train_nn(train_nn)
 
-global logitss
 
 def run():
 	num_classes = 2
@@ -217,27 +216,23 @@ def run():
 	# You'll need a GPU with at least 10 teraFLOPS to train on.
 	#  https://www.cityscapes-dataset.com/
 
-	epochs = 1
-	batch_size = 16
+	epochs = 30
+	batch_size = 32
 
 	# x = tf.placeholder(tf.float32, (None, image_shape[0], image_shape[1], num_classes))
 	correct_label = tf.placeholder(tf.float32, [None, image_shape[0], image_shape[1], num_classes])
 	keep_prob = tf.placeholder(tf.float32)
 	learning_rate = tf.placeholder(tf.float32)
-	logits = tf.Variable(1.0, name="logits")
 
 	init = tf.global_variables_initializer()
 	init_local = tf.local_variables_initializer()
-	#graph = tf.get_default_graph()
-	#with graph.as_default():
-	#	saver = tf.train.Saver()
 
 	with tf.Session() as sess:
 		# Path to vgg model
 		vgg_path = os.path.join(data_dir, 'vgg')  # ./data/vgg/
 
 		# Augment Images for better results
-		#helper.gen_augumentation_data(os.path.join(data_dir, 'data_road/training'), image_shape)
+		helper.gen_augumentation_data(os.path.join(data_dir, 'data_road/training'), image_shape)
 
 		# Create function to get batches
 		get_batches_fn = helper.gen_batch_function(os.path.join(data_dir, 'data_road/training'), image_shape)
@@ -252,8 +247,6 @@ def run():
 		layer_output = layers(layer3_out, layer4_out, layer7_out, num_classes)
 
 		logits, train_op, cross_entropy_loss = optimize(layer_output, correct_label, learning_rate, num_classes)
-
-		logitss = logits
 
 		# TODO: Train NN using the train_nn function
 		train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_loss, input_image, correct_label,
@@ -275,10 +268,29 @@ def run():
 		helper.save_inference_samples(runs_dir, data_dir, sess, image_shape, logits, keep_prob, input_image)
 
 		tf.train.Saver().save(sess, './train_model/model.ckpt')
-		print("Model saved")
+		print("Model saved")  # about 2G size
 
 		# OPTIONAL: Apply the trained model to a video
 
+def load_layers(graph):
+	"""
+    Load Pretrained Model into TensorFlow.
+    :param graph: TensorFlow Session graph
+    :return: Tuple of Tensors from model (image_input, keep_prob, layer3_out, layer4_out, layer7_out)
+    """
+	vgg_input_tensor_name = 'image_input:0'
+	vgg_keep_prob_tensor_name = 'keep_prob:0'
+	vgg_layer3_out_tensor_name = 'layer3_out:0'
+	vgg_layer4_out_tensor_name = 'layer4_out:0'
+	vgg_layer7_out_tensor_name = 'layer7_out:0'
+
+	input_tensor = graph.get_tensor_by_name(vgg_input_tensor_name)
+	keep_prob = graph.get_tensor_by_name(vgg_keep_prob_tensor_name)
+	layer3_out = graph.get_tensor_by_name(vgg_layer3_out_tensor_name)
+	layer4_out = graph.get_tensor_by_name(vgg_layer4_out_tensor_name)
+	layer7_out = graph.get_tensor_by_name(vgg_layer7_out_tensor_name)
+
+	return input_tensor, keep_prob, layer3_out, layer4_out, layer7_out
 
 def process_video(images):
 	# test train model
@@ -289,21 +301,34 @@ def process_video(images):
 	keep_prob = tf.placeholder(tf.float32)
 
 	init = tf.global_variables_initializer()
+	init_local = tf.local_variables_initializer()
 
 	with tf.Session() as sess:
-		sess.run(init)
+
 		saver = tf.train.import_meta_graph('./train_model/model.ckpt.meta')
 
 		saver.restore(sess, tf.train.latest_checkpoint('./train_model'))
 		print("Model restore...")
 
 		graph = tf.get_default_graph()
-		logitss = graph.get_tensor_by_name("logits:0")
 
-		#image = scipy.misc.imresize(scipy.misc.imread(image_file), image_shape)
+		input_image, keep_prob, layer3_out, layer4_out, layer7_out = load_layers(graph)
+		layer_output = layers(layer3_out, layer4_out, layer7_out, num_classes)
+		print("layer_output shape is : ", layer_output.get_shape())
+
+		logits = tf.reshape(layer_output, (-1, num_classes))
+		print("logits shape is : ", logits.get_shape())
+		print(logits)
+
+		sess.run(init)
+		sess.run(init_local)
+
 		image = scipy.misc.imresize(np.array(images), image_shape)
+		#image = np.array([image])
+		#print("image is ; ", image)
+
 		im_softmax = sess.run(
-			[tf.nn.softmax(logitss)],
+			[tf.nn.softmax(logits)],
 			{keep_prob: 1.0, input_image: [image]})
 		im_softmax = im_softmax[0][:, 1].reshape(image_shape[0], image_shape[1])
 		segmentation = (im_softmax > 0.5).reshape(image_shape[0], image_shape[1], 1)
@@ -312,8 +337,6 @@ def process_video(images):
 		street_im = scipy.misc.toimage(image)
 		street_im.paste(mask, box=None, mask=mask)
 
-		#yield os.path.basename(image_file), np.array(street_im)
-		#cv2.draw()
 		return street_im
 
 
@@ -330,5 +353,10 @@ def apply_train_model_on_video():
 
 
 if __name__ == '__main__':
-	run()
-	#apply_train_model_on_video()
+	is_test = False
+	if not is_test:
+		# training model
+		run()
+	else:
+		# test model
+		apply_train_model_on_video()

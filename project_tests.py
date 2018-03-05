@@ -3,7 +3,7 @@ import os
 from copy import deepcopy
 from glob import glob
 from unittest import mock
-
+#from mock import patch, MagicMock
 import numpy as np
 import tensorflow as tf
 

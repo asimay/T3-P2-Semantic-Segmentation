@@ -9,6 +9,7 @@ import time
 import tensorflow as tf
 from glob import glob
 from urllib.request import urlretrieve
+#from urllib2 import urlopen
 from tqdm import tqdm
 
 
@@ -138,3 +139,40 @@ def save_inference_samples(runs_dir, data_dir, sess, image_shape, logits, keep_p
         sess, logits, keep_prob, input_image, os.path.join(data_dir, 'data_road/testing'), image_shape)
     for name, image in image_outputs:
         scipy.misc.imsave(os.path.join(output_dir, name), image)
+
+
+def gen_augumentation_data(data_folder, image_shape):
+    """
+	Generate function to create batches of training data
+	:param data_folder: Path to folder that contains all the datasets
+	:param image_shape: Tuple - Shape of image
+	:return:
+	"""
+    image_paths = glob(os.path.join(data_folder, 'image_2', '*.png'))
+    new_image_paths = os.path.join(data_folder, 'image_2')
+
+    label_paths = {
+		re.sub(r'_(lane|road_)', '_', os.path.basename(path)): path
+		for path in glob(os.path.join(data_folder, 'gt_image_2', '*_road_*.png'))
+	}
+    new_label_paths = os.path.join(data_folder, 'gt_image_2')
+    #print("image_paths:", image_paths)
+	#print("label_paths:", label_paths)
+
+    for image_path, label_path in zip(image_paths, label_paths):
+        gt_image_file = label_paths[os.path.basename(image_path)]
+        # gt_image = scipy.misc.imresize(scipy.misc.imread(gt_image_file), image_shape)
+        gt_image = scipy.misc.imread(gt_image_file)
+        # origal_image = scipy.misc.imresize(scipy.misc.imread(image_path), image_shape)
+        original_image = scipy.misc.imread(image_path)
+
+        # horizon flip images
+        flip_image = np.fliplr(original_image)
+        new_image_file = 'new_' + os.path.basename(image_path)
+        scipy.misc.imsave(os.path.join(new_image_paths, new_image_file), flip_image)
+
+        flip_gt_image = np.fliplr(gt_image)
+        new_gt_image_file = 'new_' + os.path.basename(gt_image_file)
+        scipy.misc.imsave(os.path.join(new_label_paths, new_gt_image_file), flip_gt_image)
+
+    return
