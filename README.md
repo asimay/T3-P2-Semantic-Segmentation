@@ -4,13 +4,14 @@ In this project, you'll label the pixels of a road in images using a Fully Convo
 
 ---
 
-[image1]: ./output/fianl1.gif
-[image11]: ./output/final2.gif
-[image2]: ./output/trajectory.PNG
-[image3]: ./output/1.PNG
-[image4]: ./output/2.PNG
-[image5]: ./output/best.PNG
-[image6]: ./output/trap.PNG
+[image1]: ./outputs/um_000005.png
+[image2]: ./outputs/1um_000005.png
+[image3]: ./outputs/um_000015.png
+[image4]: ./outputs/1um_000015.png
+[image5]: ./outputs/fcn8.png
+[image6]: ./outputs/pg1.png
+[image7]: ./outputs/pg2.png
+[image8]: ./outputs/loss.png
 
 ### Final result
 
@@ -60,18 +61,19 @@ In training function `train_nn()`, set `feed_list` as feed_dict's input, and the
 I also wrote a small piece of code to show training progress. This will give us a direct feeling of training.
 
 ![alt text][image6]
+![alt text][image7]
 
 set training hyper parameters:
 ```
-	epochs = 30
-	batch_size = 32
+epochs = 30
+batch_size = 32
 ```
 
 #### 5. Training Loss
 
 And the training loss shows as below:
 
-![alt text][image7]
+![alt text][image8]
 
 After training, save the model with `tf.train.Saver().save`, this produce about 2G model files.
 
@@ -79,8 +81,8 @@ After training, save the model with `tf.train.Saver().save`, this produce about 
 
 With the trained model, test the testing images, and output all results to  `runs` dir.
 
-![alt text][image1]
-![alt text][image3]
+![alt text][image2]
+![alt text][image4]
 
 #### 7. Testing on videos:
 
